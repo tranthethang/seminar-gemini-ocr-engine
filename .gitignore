@@ -208,3 +208,6 @@ __marimo__/
 
 sample_data/
 .idea/
+
+.venv/
+tmp/
