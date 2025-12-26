@@ -93,6 +93,12 @@ def main():
         # 2. Extract info using processed image
         api_start = time.time()
         result = extract_card_info(processed_img_path)
+        
+        # Retry logic: if person_name is null, retry with original image
+        if result and result.get("person_name") is None:
+            logger.info(f"person_name is null for {img_path.name}, retrying with original image...")
+            result = extract_card_info(img_path)
+            
         api_end = time.time()
         api_duration = api_end - api_start
         logger.info(f"Send Gemini API từ {time.strftime('%H:%M:%S', time.localtime(api_start))} tới {time.strftime('%H:%M:%S', time.localtime(api_end))} tổng {api_duration:.2f} giây")
