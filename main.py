@@ -4,6 +4,7 @@ import PIL.Image
 import json
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from loguru import logger
 from pathlib import Path
 from dotenv import load_dotenv
@@ -25,35 +26,80 @@ client = genai.Client(api_key=api_key)
 
 def extract_card_info(image_path):
     try:
-        img_pil = PIL.Image.open(image_path)
+        with PIL.Image.open(image_path) as img_pil:
+            # Resize image if width > 500px
+            if img_pil.width > 500:
+                new_width = 500
+                new_height = int(img_pil.height * (new_width / img_pil.width))
+                img_pil = img_pil.resize((new_width, new_height), PIL.Image.Resampling.LANCZOS)
+                img_pil.save(image_path)
+                logger.info(f"Resized {image_path} to width 500px")
+            
+            # Re-read or use the current img_pil for API
+            # Since img_pil might be modified, we use it directly
+            try:
+                with open("prompt.md", "r", encoding="utf-8") as f:
+                    prompt_text = f.read()
+            except FileNotFoundError:
+                logger.error("File prompt.md not found")
+                return None
+
+            model_id = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+            logger.info(f"Sending request to Gemini model: {model_id} for {image_path}")
+            
+            try:
+                response = client.models.generate_content(
+                    model=model_id,
+                    contents=[prompt_text, img_pil],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        temperature=0.1
+                    )
+                )
+                data = json.loads(response.text)
+                return data
+            except Exception as e:
+                logger.exception(f"Error during Gemini API call or JSON parsing: {e}")
+                return None
     except Exception as e:
-        logger.error(f"Could not open image {image_path}: {e}")
+        logger.error(f"Could not open or resize image {image_path}: {e}")
         return None
 
-    try:
-        with open("prompt.md", "r", encoding="utf-8") as f:
-            prompt_text = f.read()
-    except FileNotFoundError:
-        logger.error("File prompt.md not found")
-        return None
 
-    model_id = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-    logger.info(f"Sending request to Gemini model: {model_id} for {image_path}")
+def process_image_task(img_path, tmp_dir):
+    logger.info(f"--- Processing {img_path.name} started at {time.strftime('%H:%M:%S')} ---")
+    img_start_time = time.time()
+
+    # 1. Process image (detect card and perspective transform)
+    process_start = time.time()
+    processed_img_path = tmp_dir / f"processed_{img_path.name}"
+    process_card(str(img_path), str(processed_img_path))
+    process_end = time.time()
+    process_duration = process_end - process_start
+    logger.info(f"Xử lý ảnh từ {time.strftime('%H:%M:%S', time.localtime(process_start))} tới {time.strftime('%H:%M:%S', time.localtime(process_end))} tổng {process_duration:.2f} giây")
     
-    try:
-        response = client.models.generate_content(
-            model=model_id,
-            contents=[prompt_text, img_pil],
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                temperature=0.1
-            )
-        )
-        data = json.loads(response.text)
-        return data
-    except Exception as e:
-        logger.exception(f"Error during Gemini API call or JSON parsing: {e}")
-        return None
+    # 2. Extract info using processed image
+    api_start = time.time()
+    result = extract_card_info(processed_img_path)
+    
+    # Retry logic: if person_name is null, retry with original image
+    if result and result.get("person_name") is None:
+        logger.info(f"person_name is null for {img_path.name}, retrying with original image...")
+        result = extract_card_info(img_path)
+        
+    api_end = time.time()
+    api_duration = api_end - api_start
+    logger.info(f"Send Gemini API từ {time.strftime('%H:%M:%S', time.localtime(api_start))} tới {time.strftime('%H:%M:%S', time.localtime(api_end))} tổng {api_duration:.2f} giây")
+
+    if result:
+        print(f"--- Result for {img_path.name} ---")
+        print(json.dumps(result, indent=4, ensure_ascii=False))
+    else:
+        logger.error(f"Failed to extract info from {img_path}")
+    
+    img_end_time = time.time()
+    logger.info(f"--- Kết thúc lúc {time.strftime('%H:%M:%S', time.localtime(img_end_time))} (Tổng cộng: {img_end_time - img_start_time:.2f} giây) ---")
+    return result
 
 
 def main():
@@ -78,39 +124,10 @@ def main():
     tmp_dir = Path("tmp")
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
-    for img_path in image_files:
-        logger.info(f"--- Processing {img_path.name} started at {time.strftime('%H:%M:%S')} ---")
-        img_start_time = time.time()
-
-        # 1. Process image (detect card and perspective transform)
-        process_start = time.time()
-        processed_img_path = tmp_dir / f"processed_{img_path.name}"
-        process_card(str(img_path), str(processed_img_path))
-        process_end = time.time()
-        process_duration = process_end - process_start
-        logger.info(f"Xử lý ảnh từ {time.strftime('%H:%M:%S', time.localtime(process_start))} tới {time.strftime('%H:%M:%S', time.localtime(process_end))} tổng {process_duration:.2f} giây")
-        
-        # 2. Extract info using processed image
-        api_start = time.time()
-        result = extract_card_info(processed_img_path)
-        
-        # Retry logic: if person_name is null, retry with original image
-        if result and result.get("person_name") is None:
-            logger.info(f"person_name is null for {img_path.name}, retrying with original image...")
-            result = extract_card_info(img_path)
-            
-        api_end = time.time()
-        api_duration = api_end - api_start
-        logger.info(f"Send Gemini API từ {time.strftime('%H:%M:%S', time.localtime(api_start))} tới {time.strftime('%H:%M:%S', time.localtime(api_end))} tổng {api_duration:.2f} giây")
-
-        if result:
-            print(f"--- Result for {img_path.name} ---")
-            print(json.dumps(result, indent=4, ensure_ascii=False))
-        else:
-            logger.error(f"Failed to extract info from {img_path}")
-        
-        img_end_time = time.time()
-        logger.info(f"--- Kết thúc lúc {time.strftime('%H:%M:%S', time.localtime(img_end_time))} (Tổng cộng: {img_end_time - img_start_time:.2f} giây) ---")
+    # Parallel processing using ThreadPoolExecutor
+    max_workers = min(len(image_files), 10)  # Adjust based on API limits and local resources
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        executor.map(lambda p: process_image_task(p, tmp_dir), image_files)
 
 
 
