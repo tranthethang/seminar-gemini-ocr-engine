@@ -9,7 +9,9 @@ from app.services.ocr.factory import OCREngineFactory
 from app.config import Config
 
 class ImageProcessingPipeline:
-    def __init__(self, ocr_engine_type: str = "gemini"):
+    def __init__(self, ocr_engine_type: Optional[str] = None):
+        if ocr_engine_type is None:
+            ocr_engine_type = Config.ENGINE_TYPE
         self.ocr_engine = OCREngineFactory.get_engine(ocr_engine_type)
         self.tmp_dir = Config.TMP_DIR
         self.tmp_dir.mkdir(parents=True, exist_ok=True)
@@ -43,8 +45,7 @@ class ImageProcessingPipeline:
         logger.info(f"OCR Extraction took {api_duration:.2f} seconds")
 
         if result:
-            logger.info(f"--- Result for {img_path.name} ---")
-            logger.info(json.dumps(result, indent=4, ensure_ascii=False))
+            logger.info(f"--- Result for {img_path.name} extracted successfully ---")
         else:
             logger.error(f"Failed to extract info from {img_path}")
         

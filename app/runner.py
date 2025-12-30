@@ -1,3 +1,5 @@
+import time
+import json
 from concurrent.futures import ThreadPoolExecutor
 from loguru import logger
 from pathlib import Path
@@ -33,4 +35,20 @@ class Runner:
         # Parallel processing using ThreadPoolExecutor
         max_workers = min(len(image_files), 10)  # Adjust based on API limits and local resources
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            executor.map(self.pipeline.process_image, image_files)
+            results = list(executor.map(self.pipeline.process_image, image_files))
+
+        # Aggregate and sort results
+        aggregated_results = {}
+        for img_path, result in zip(image_files, results):
+            if result:
+                aggregated_results[img_path.name] = result
+        
+        sorted_results = dict(sorted(aggregated_results.items()))
+
+        # Save to JSON in tmp directory
+        timestamp = int(time.time())
+        output_file = Config.TMP_DIR / f"{timestamp}.json"
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump(sorted_results, f, indent=4, ensure_ascii=False)
+        
+        logger.info(f"Aggregated results saved to {output_file}")
