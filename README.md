@@ -4,6 +4,8 @@ This project is an intelligent OCR engine designed to extract structured informa
 traditional computer vision techniques (OpenCV) for image preprocessing with the power of Google's Gemini Generative AI
 for accurate text extraction and structuring.
 
+![Seminar Gemini OCR Engine](assets/repo.png)
+
 ## Features
 
 - **Smart Image Preprocessing**: Automatically detects business card boundaries, crops the image, and applies
