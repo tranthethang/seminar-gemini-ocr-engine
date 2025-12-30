@@ -6,5 +6,8 @@ class OCREngineFactory:
         if engine_type == "gemini":
             from app.services.ocr.gemini import GeminiOCREngine
             return GeminiOCREngine()
+        elif engine_type == "ollama":
+            from app.services.ocr.ollama import OllamaOCREngine
+            return OllamaOCREngine()
         else:
             raise ValueError(f"Unknown OCR engine type: {engine_type}")

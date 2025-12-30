@@ -33,13 +33,13 @@ class GeminiOCREngine(OCREngine):
         try:
             with PIL.Image.open(image_path) as img_pil:
                 # Resize logic
-                if img_pil.width > 500:
-                    new_width = 500
+                if img_pil.width > 1024:
+                    new_width = 1024
                     new_height = int(img_pil.height * (new_width / img_pil.width))
                     img_pil = img_pil.resize((new_width, new_height), PIL.Image.Resampling.LANCZOS)
                     # Note: Original code saves the resized image back to disk. 
                     img_pil.save(image_path)
-                    logger.info(f"Resized {image_path} to width 500px")
+                    logger.info(f"Resized {image_path} to width 1024px")
                 
                 logger.info(f"Sending request to Gemini model: {self.model_id} for {image_path}")
                 
@@ -49,7 +49,7 @@ class GeminiOCREngine(OCREngine):
                         contents=[self.prompt_text, img_pil],
                         config=types.GenerateContentConfig(
                             response_mime_type="application/json",
-                            temperature=0.1
+                            temperature=0.0
                         )
                     )
                     data = json.loads(response.text)
