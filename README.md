@@ -8,8 +8,9 @@ for accurate text extraction and structuring.
 
 - **Smart Image Preprocessing**: Automatically detects business card boundaries, crops the image, and applies
   perspective correction using OpenCV.
-- **AI-Powered Extraction**: Uses Google's Gemini model (e.g., `gemini-2.0-flash`) to extract fields like Company Name,
-  Person Name, Position, Contact Info, and Address.
+- **AI-Powered Extraction**: Supports multiple engines for extraction:
+    - **Google Gemini**: High-performance extraction using models like `gemini-2.0-flash`.
+    - **Local LLMs (via Ollama)**: Run OCR locally for privacy and cost-efficiency. Tested with `gemma:4b`, `gemma:12b`, and `minicpm-v`.
 - **Parallel Processing**: Efficiently processes multiple images concurrently using `ThreadPoolExecutor`.
 - **Resilient Workflow**: Includes retry mechanisms—if extraction fails on the processed image, it automatically retries
   with the original image.
@@ -18,7 +19,9 @@ for accurate text extraction and structuring.
 ## Prerequisites
 
 - Python 3.8 or higher
-- A Google Gemini API Key
+- **Engine Options**:
+    - **Google Gemini**: A Google Gemini API Key.
+    - **Local (Ollama)**: [Ollama](https://ollama.com/) installed and running locally with vision-capable models.
 
 ## Installation
 
@@ -46,10 +49,20 @@ for accurate text extraction and structuring.
    ```bash
    cp .env.example .env
    ```
-   Open `.env` and set your API key:
+   Open `.env` and configure your engine:
+   
+   **For Google Gemini:**
    ```env
+   ENGINE_TYPE=gemini
    GEMINI_API_KEY=your_google_gemini_api_key
    GEMINI_MODEL=gemini-2.0-flash
+   ```
+
+   **For Ollama (Local):**
+   ```env
+   ENGINE_TYPE=ollama
+   OLLAMA_BASE_URL=http://localhost:11434
+   OLLAMA_MODEL=minicpm-v
    ```
 
 2. **Prompt Customization**
@@ -75,10 +88,10 @@ for accurate text extraction and structuring.
 
 1. **Load Image**: The system reads images from `sample_data`.
 2. **Preprocess**:
-    - `utils/image_processor.py` detects the card contours.
+    - `app/image_processor.py` detects the card contours.
     - Applies a 4-point perspective transform to "flatten" the card.
 3. **Inference**:
-    - The processed image is sent to the Gemini API.
+    - The processed image is sent to the selected AI engine (Gemini or Ollama) based on `ENGINE_TYPE`.
     - The prompt from `prompt.md` guides the model to return specific JSON fields.
 4. **Fallback**: If the model fails to extract a name from the processed image, the system retries with the original raw
    image.
