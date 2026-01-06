@@ -212,3 +212,6 @@ sample_data/
 .venv/
 tmp/
 app.log
+
+.zencoder/
+.zenflow/
