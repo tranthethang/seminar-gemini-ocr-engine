@@ -8,6 +8,7 @@ from typing import Optional, Dict, Any
 
 from app.config import Config
 from app.services.ocr.base import OCREngine
+from app.services.observability.langfuse_service import langfuse_manager
 
 class GeminiOCREngine(OCREngine):
     def __init__(self):
@@ -30,20 +31,69 @@ class GeminiOCREngine(OCREngine):
              logger.error("Prompt text is empty. Cannot process.")
              return None
              
-        try:
-            with PIL.Image.open(image_path) as img_pil:
-                # Resize logic
-                if img_pil.width > 1024:
-                    new_width = 1024
-                    new_height = int(img_pil.height * (new_width / img_pil.width))
-                    img_pil = img_pil.resize((new_width, new_height), PIL.Image.Resampling.LANCZOS)
-                    # Note: Original code saves the resized image back to disk. 
-                    img_pil.save(image_path)
-                    logger.info(f"Resized {image_path} to width 1024px")
-                
-                logger.info(f"Sending request to Gemini model: {self.model_id} for {image_path}")
-                
+        langfuse_client = langfuse_manager.get_client()
+        
+        # Using context managers as in the example provided by user
+        if langfuse_client:
+            with langfuse_client.start_as_current_observation(as_type="span", name="ocr-process", input={"image_path": str(image_path)}) as root_span:
                 try:
+                    with PIL.Image.open(image_path) as img_pil:
+                        # Resize logic
+                        if img_pil.width > 1024:
+                            new_width = 1024
+                            new_height = int(img_pil.height * (new_width / img_pil.width))
+                            img_pil = img_pil.resize((new_width, new_height), PIL.Image.Resampling.LANCZOS)
+                            # Note: Original code saves the resized image back to disk. 
+                            img_pil.save(image_path)
+                            logger.info(f"Resized {image_path} to width 1024px")
+                        
+                        logger.info(f"Sending request to Gemini model: {self.model_id} for {image_path}")
+                        
+                        # Start a generation for the LLM call
+                        with langfuse_client.start_as_current_observation(
+                            as_type="generation", 
+                            name="gemini-generation", 
+                            model=self.model_id,
+                            input=[self.prompt_text, "image_data"]
+                        ) as generation:
+                            try:
+                                response = self.client.models.generate_content(
+                                    model=self.model_id,
+                                    contents=[self.prompt_text, img_pil],
+                                    config=types.GenerateContentConfig(
+                                        response_mime_type="application/json",
+                                        temperature=0.0
+                                    )
+                                )
+                                data = json.loads(response.text)
+                                
+                                generation.update(output=data)
+                                root_span.update(output=data)
+                                    
+                                return data
+                            except Exception as e:
+                                logger.exception(f"Error during Gemini API call or JSON parsing: {e}")
+                                generation.update(level="ERROR", status_message=str(e))
+                                root_span.update(level="ERROR", status_message=str(e))
+                                return None
+                except Exception as e:
+                    logger.error(f"Could not open or resize image {image_path}: {e}")
+                    root_span.update(level="ERROR", status_message=str(e))
+                    return None
+                finally:
+                    langfuse_manager.flush()
+        else:
+            # Fallback if langfuse is not available
+            try:
+                with PIL.Image.open(image_path) as img_pil:
+                    if img_pil.width > 1024:
+                        new_width = 1024
+                        new_height = int(img_pil.height * (new_width / img_pil.width))
+                        img_pil = img_pil.resize((new_width, new_height), PIL.Image.Resampling.LANCZOS)
+                        img_pil.save(image_path)
+                        logger.info(f"Resized {image_path} to width 1024px")
+                    
+                    logger.info(f"Sending request to Gemini model: {self.model_id} for {image_path}")
                     response = self.client.models.generate_content(
                         model=self.model_id,
                         contents=[self.prompt_text, img_pil],
@@ -52,11 +102,7 @@ class GeminiOCREngine(OCREngine):
                             temperature=0.0
                         )
                     )
-                    data = json.loads(response.text)
-                    return data
-                except Exception as e:
-                    logger.exception(f"Error during Gemini API call or JSON parsing: {e}")
-                    return None
-        except Exception as e:
-            logger.error(f"Could not open or resize image {image_path}: {e}")
-            return None
+                    return json.loads(response.text)
+            except Exception as e:
+                logger.error(f"Error without Langfuse: {e}")
+                return None

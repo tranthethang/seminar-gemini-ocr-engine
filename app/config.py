@@ -18,6 +18,11 @@ class Config:
     SAMPLE_DATA_DIR = Path("sample_data")
     TMP_DIR = Path("tmp")
     
+    # Langfuse Config
+    LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY")
+    LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY")
+    LANGFUSE_HOST = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+    
     @staticmethod
     def validate():
         if Config.ENGINE_TYPE == "gemini":
