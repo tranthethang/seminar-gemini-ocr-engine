@@ -1,5 +1,6 @@
 from langfuse import Langfuse
 from loguru import logger
+from litellm import completion_cost
 from app.config import Config
 
 class LangfuseManager:
@@ -29,5 +30,36 @@ class LangfuseManager:
     def flush(self):
         if self.client:
             self.client.flush()
+
+    def log_cost(self, model: str, prompt_tokens: int, completion_tokens: int):
+        try:
+            # LiteLLM expects model name in a specific format if not standard
+            # For Gemini, it's usually just the model name or gemini/model-name
+            # We'll try to prepend 'gemini/' if it's not already there for Gemini models
+            litellm_model = model
+            if "gemini" in model.lower() and not model.lower().startswith("gemini/"):
+                litellm_model = f"gemini/{model}"
+            
+            # Construct a dummy response object for LiteLLM to calculate cost
+            dummy_response = {
+                "usage": {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens
+                }
+            }
+            
+            cost = completion_cost(
+                model=litellm_model,
+                completion_response=dummy_response
+            )
+            
+            if cost is not None:
+                logger.info(f"Estimated Cost for {model}: ${cost:.6f}")
+            else:
+                logger.warning(f"Could not calculate cost for model: {model}")
+            return cost
+        except Exception as e:
+            logger.error(f"Error calculating cost with litellm: {e}")
+            return None
 
 langfuse_manager = LangfuseManager()
