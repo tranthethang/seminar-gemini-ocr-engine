@@ -47,7 +47,8 @@ class Runner:
 
         # Save to JSON in tmp directory
         timestamp = int(time.time())
-        output_file = Config.TMP_DIR / f"{timestamp}.json"
+        model_prefix = Config.GEMINI_MODEL if Config.ENGINE_TYPE == "gemini" else Config.OLLAMA_MODEL
+        output_file = Config.TMP_DIR / f"{model_prefix}_{timestamp}.json"
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(sorted_results, f, indent=4, ensure_ascii=False)
         

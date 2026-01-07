@@ -1,10 +1,13 @@
-Extract contact information from this business card image.
+Extract all contact information from the provided business card image with high precision.
 
 ### RULES:
-- **ONLY** extract text visible in the image.
-- **NEVER** invent or assume data (no hallucinations).
-- If a field is not found, set it to `null`.
-- Return **ONLY** a JSON object.
+- **STRICTLY ONLY** extract text that is clearly visible in the image.
+- **NEVER** invent, assume, or hallucinate data that is not present.
+- **DO NOT TRANSLATE** any text. Keep the original text exactly as it appears (including Vietnamese or other languages).
+- **CLEAN VALUES**: Remove labels or icons such as "M:", "P:", "E:", "Tel:", or phone icons. Extract only the actual data.
+- **ACCURACY**: Pay close attention to numbers and special characters in emails and websites.
+- If a field is not found or is illegible, set it to `null`.
+- Return **ONLY** a valid JSON object.
 
 ### JSON Structure:
 {
